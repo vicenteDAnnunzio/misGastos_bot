@@ -80,7 +80,7 @@ client.on("interactionCreate", async (interaction) => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message: texto,
-          fecha: fechaFormateada
+          fecha: fechaFormateada 
         }),
       });
 
