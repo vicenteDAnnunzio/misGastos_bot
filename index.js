@@ -51,7 +51,7 @@ const client = new Client({
 });
 
 // =====================================================
-// REGISTRAR /gasto
+// REGISTRAR /gasto y /inversion
 // =====================================================
 
 const commands = [
@@ -78,6 +78,25 @@ const commands = [
         .setDescription("Método de pago")
         .setRequired(true)
     )
+    .toJSON(),
+  new SlashCommandBuilder()
+    .setName("inversion")
+    .setDescription("Registrar una inversión en Google Sheets")
+    .addStringOption(opt =>
+      opt.setName("ticker")
+        .setDescription("Ticker de la inversión")
+        .setRequired(true)
+    )
+    .addNumberOption(opt =>
+      opt.setName("cantidad")
+        .setDescription("Cantidad de acciones/unidades")
+        .setRequired(true)
+    )
+    .addNumberOption(opt =>
+      opt.setName("monto")
+        .setDescription("Monto total de la inversión")
+        .setRequired(true)
+    )
     .toJSON()
 ];
 
@@ -85,14 +104,14 @@ const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
 
 (async () => {
   try {
-    console.log("➡ Registrando comando /gasto…");
+    console.log("➡ Registrando comandos /gasto y /inversion…");
     await rest.put(
       Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID),
       { body: commands }
     );
-    console.log("✔ /gasto registrado correctamente.");
+    console.log("✔ Comandos registrados correctamente.");
   } catch (err) {
-    console.error("❌ Error registrando /gasto:", err);
+    console.error("❌ Error registrando comandos:", err);
   }
 })();
 
@@ -130,6 +149,39 @@ client.on("interactionCreate", async (interaction) => {
         await interaction.editReply("✅ Gasto registrado correctamente en Google Sheets");
       } else {
         await interaction.editReply("❌ Error al registrar en Apps Script");
+      }
+
+    } catch (err) {
+      console.error("❌ ERROR DE CONEXIÓN:", err);
+      await interaction.editReply("⚠️ Error de conexión con Apps Script");
+    }
+  } 
+  else if (interaction.commandName === "inversion") {
+    
+    const ticker = interaction.options.getString("ticker");
+    const cantidad = interaction.options.getNumber("cantidad");
+    const monto = interaction.options.getNumber("monto");
+
+    await interaction.reply("⏳ Registrando inversión...");
+
+    const payload = { tipo: "inversion", ticker, cantidad, monto };
+
+    console.log("➡ Enviando inversión a Apps Script:", payload);
+
+    try {
+      const res = await fetch(WEBHOOK_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      const json = await res.json();
+      console.log("➡ Respuesta Apps Script:", json);
+
+      if (json.status === "ok") {
+        await interaction.editReply("✅ Inversión registrada correctamente en Google Sheets");
+      } else {
+        await interaction.editReply("❌ Error al registrar inversión en Apps Script");
       }
 
     } catch (err) {
