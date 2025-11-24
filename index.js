@@ -41,7 +41,7 @@ console.log("===================================");
 // =====================================================
 
 // OJO: Asegúrate que esta URL sea la correcta de tu despliegue web de Apps Script
-const WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbyAQBxvt_cReZDiB_xZQRT3yS9VEWSe8tjjFDSAYDu6Dc6T3I3YHTrOS7FSVNdSERgE/exec";
+const WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbwT03TfcYYBcTU_aEcd4sd7r0GMJnijLOKE9bqmi8Ok1i8DLFRgBeHoPvBW3St9hFWX/exechttps://script.google.com/macros/s/AKfycby1wPCsg09ZZpQBqknFpRJQgKzt93PaaJuIyIG46o7NlMvYgYiRpGkfSnbw7WUgiGif/exec";
 
 const client = new Client({
   intents: [

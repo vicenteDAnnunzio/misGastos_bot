@@ -1,0 +1,85 @@
+💸 Bot de Gastos Personales (Discord + Google Sheets)
+
+Un sistema minimalista y 100% gratuito para registrar gastos personales directamente desde Discord a Google Sheets, hosteado 24/7 en la nube.
+
+🟢 ¿Qué hace este proyecto?
+
+Este bot permite registrar gastos rápidamente sin abrir Excel ni aplicaciones complejas. Simplemente envías un comando por Discord y el dato aparece mágicamente en tu hoja de cálculo.
+Flujo de Datos:
+Discord ➡ Bot (Node.js en Render) ➡ Google Apps Script ➡ Google Sheets
+🛠 Tech Stack & Arquitectura
+Este proyecto fue diseñado para ser gratis de por vida y no depender de una PC encendida.
+Lenguaje: Node.js (Discord.js v14).
+Hosting: Render.com (Web Service gratuito).
+Base de Datos: Google Sheets.
+Conexión: Google Apps Script (recibe el POST y escribe en la hoja).
+Keep-Alive: Cron-job.org (mantiene el bot despierto cada 10 min).
+
+🚀 Comandos Disponibles
+/gasto
+Registra un nuevo movimiento en la hoja de cálculo.
+Parámetro
+Descripción
+Ejemplo
+categoria
+Tipo de gasto (Comida, Transporte, etc.)
+Supermercado
+descripcion
+Detalle corto del gasto
+Compra semanal
+monto
+
+Valor numérico del gasto
+
+15000
+
+metodo
+
+Forma de pago
+
+MercadoPago
+
+Ejemplo de uso:
+/gasto categoria:Salidas descripcion:Cena con amigos monto:4500 metodo:Debito
+
+⚙️ Configuración del Entorno (.env)
+
+Para que el bot funcione, requiere las siguientes variables de entorno (configuradas en Render):
+
+TOKEN=      # Token del bot de Discord
+CLIENT_ID=  # ID de la aplicación de Discord
+GUILD_ID=   # ID del servidor donde funciona el bot
+# Nota: La URL del Webhook de Apps Script está hardcodeada en index.js
+
+
+
+
+☁️ Despliegue y Mantenimiento
+
+1. Hosting en Render
+El bot corre como un Web Service en Render.
+Build Command: npm install
+Start Command: node index.js
+Se usa un servidor express dummy en el puerto 3000 para que Render detecte el servicio como activo.
+
+
+2. Evitar la suspensión (Sleep Mode)
+Render suspende los servicios gratuitos tras 15 mins de inactividad.
+Solución: Un cronjob externo (Cron-job.org) hace una petición GET a la URL del bot (https://tu-bot.onrender.com) cada 10 minutos.
+
+
+3. Google Apps Script
+El script recibe un doPost(e), parsea el JSON y añade una fila a la hoja Gastos_2025.
+Importante: Si se modifica el Apps Script, se debe crear una Nueva Implementación para actualizar la URL del Webhook.
+📝 Cómo actualizar el bot
+Hacer cambios en el código local (VS Code).
+
+git add .
+
+git commit -m "Mejoras..."
+
+git push
+
+Render detectará el push y desplegará la nueva versión automáticamente.
+
+Hecho con ☕ y ganas de no pagar hosting.
