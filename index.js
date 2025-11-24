@@ -1,104 +1,146 @@
-import { Client, GatewayIntentBits, REST, Routes } from "discord.js";
+// --- INICIO CÓDIGO PARA RENDER (VERSIÓN CORRECTA) ---
+import express from 'express';
+const app = express();
+
+app.get('/', (req, res) => {
+  res.send('Hola, soy el bot de gastos y estoy vivo.');
+});
+
+const port = process.env.PORT || 3000;
+app.listen(port, () => {
+  console.log(`Servidor web escuchando en el puerto ${port}`);
+});
+// --- FIN CÓDIGO PARA RENDER ---
+
+// Aquí abajo sigue tu código de siempre...
+
+import { 
+  Client, 
+  GatewayIntentBits, 
+  REST, 
+  Routes,
+  SlashCommandBuilder
+} from "discord.js";
 import fetch from "node-fetch";
 import dotenv from "dotenv";
+
+// =====================================================
+// CARGAR .env (PASO 3 + 4 APLICADO)
+// =====================================================
+
 dotenv.config();
 
-// =========================
-//  CONFIG
-// =========================
+console.log("===================================");
+console.log("TOKEN CARGADO?", process.env.TOKEN ? "SI" : "NO");
+console.log("CLIENT_ID CARGADO?", process.env.CLIENT_ID ? "SI" : "NO");
+console.log("GUILD_ID CARGADO?", process.env.GUILD_ID ? "SI" : "NO");
+console.log("===================================");
 
-// Webhook REAL de n8n
-const WEBHOOK_URL = "https://vicentedannunzio.app.n8n.cloud/webhook/28b92a1b-0e40-4171-94d8-600e9c859361";
+// =====================================================
+// CONFIG
+// =====================================================
+
+// OJO: Asegúrate que esta URL sea la correcta de tu despliegue web de Apps Script
+const WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbyAQBxvt_cReZDiB_xZQRT3yS9VEWSe8tjjFDSAYDu6Dc6T3I3YHTrOS7FSVNdSERgE/exec";
 
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildMessages
   ],
 });
 
-// =========================
-//   REGISTRAR /gasto
-// =========================
+// =====================================================
+// REGISTRAR /gasto
+// =====================================================
 
 const commands = [
-  {
-    name: "gasto",
-    description: "Registrar un gasto en Google Sheets",
-    options: [
-      {
-        name: "data",
-        description: "Formato: categoria, descripcion, monto, metodo",
-        type: 3,
-        required: true,
-      },
-    ],
-  },
+  new SlashCommandBuilder()
+    .setName("gasto")
+    .setDescription("Registrar un gasto en Google Sheets")
+    .addStringOption(opt =>
+      opt.setName("categoria")
+        .setDescription("Categoría del gasto")
+        .setRequired(true)
+    )
+    .addStringOption(opt =>
+      opt.setName("descripcion")
+        .setDescription("Descripción del gasto")
+        .setRequired(true)
+    )
+    .addNumberOption(opt =>
+      opt.setName("monto")
+        .setDescription("Monto del gasto")
+        .setRequired(true)
+    )
+    .addStringOption(opt =>
+      opt.setName("metodo")
+        .setDescription("Método de pago")
+        .setRequired(true)
+    )
+    .toJSON()
 ];
 
 const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
 
 (async () => {
   try {
+    console.log("➡ Registrando comando /gasto…");
     await rest.put(
       Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID),
       { body: commands }
     );
-    console.log("✔ Comando /gasto registrado correctamente.");
+    console.log("✔ /gasto registrado correctamente.");
   } catch (err) {
-    console.error("❌ Error registrando comando:", err);
+    console.error("❌ Error registrando /gasto:", err);
   }
 })();
 
-// =========================
-//  MANEJO DEL COMANDO
-// =========================
+// =====================================================
+// MANEJO DEL COMANDO
+// =====================================================
 
 client.on("interactionCreate", async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
 
   if (interaction.commandName === "gasto") {
-    const texto = interaction.options.getString("data");
+    
+    const categoria = interaction.options.getString("categoria");
+    const descripcion = interaction.options.getString("descripcion");
+    const monto = interaction.options.getNumber("monto");
+    const metodo = interaction.options.getString("metodo");
 
-    if (!texto.includes(",")) {
-      return interaction.reply({
-        content: "❌ Formato inválido. Usa: categoria, descripcion, monto, metodo",
-        ephemeral: true,
-      });
-    }
+    await interaction.reply("⏳ Registrando gasto...");
 
-    // ======== GENERAR FECHA SIN HORA =========
-    const fechaActual = new Date();
-    const fechaFormateada = fechaActual.toLocaleDateString("es-AR"); 
-    // Ejemplo: 23/11/2025
+    const payload = { categoria, descripcion, monto, metodo };
+
+    console.log("➡ Enviando a Apps Script:", payload);
 
     try {
-      // Mandar a n8n **con fecha sin hora**
-      await fetch(WEBHOOK_URL, {
+      const res = await fetch(WEBHOOK_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message: texto,
-          fecha: fechaFormateada 
-        }),
+        body: JSON.stringify(payload)
       });
 
-      await interaction.reply(`✔ Gasto enviado:\n\`${texto}\``);
+      const json = await res.json();
+      console.log("➡ Respuesta Apps Script:", json);
+
+      if (json.status === "ok") {
+        await interaction.editReply("✅ Gasto registrado correctamente en Google Sheets");
+      } else {
+        await interaction.editReply("❌ Error al registrar en Apps Script");
+      }
 
     } catch (err) {
-      console.error("❌ Error enviando a n8n:", err);
-
-      await interaction.reply({
-        content: "❌ No se pudo enviar el gasto. ¿Está n8n activo?",
-        ephemeral: true,
-      });
+      console.error("❌ ERROR DE CONEXIÓN:", err);
+      await interaction.editReply("⚠️ Error de conexión con Apps Script");
     }
   }
 });
 
-// =========================
-//  LOGIN BOT
-// =========================
+// =====================================================
+// LOGIN BOT
+// =====================================================
 
 client.login(process.env.TOKEN);
