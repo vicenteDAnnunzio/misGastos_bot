@@ -1,9 +1,19 @@
-// --- INICIO CÓDIGO PARA RENDER (VERSIÓN CORRECTA) ---
+// --- INICIO CÓDIGO PARA RENDER CON AUTO-REPARACIÓN ---
 import express from 'express';
 const app = express();
 
+// Variable para guardar el cliente de Discord y chequearlo
+let botClient = null;
+
 app.get('/', (req, res) => {
-  res.send('Hola, soy el bot de gastos y estoy vivo.');
+  // AUTO-CHEQUEO: Si Discord no está listo, matamos el proceso para que Render reinicie
+  if (botClient && !botClient.isReady()) {
+    console.error("🔴 El bot estaba desconectado. Forzando reinicio...");
+    res.status(500).send('Bot desconectado. Reiniciando...');
+    process.exit(1); // ESTO OBLIGA A RENDER A REINICIARLO
+  }
+  
+  res.send('Bot Inversiones y Gastos activo y conectado 🟢');
 });
 
 const port = process.env.PORT || 3000;
@@ -11,8 +21,6 @@ app.listen(port, () => {
   console.log(`Servidor web escuchando en el puerto ${port}`);
 });
 // --- FIN CÓDIGO PARA RENDER ---
-
-// Aquí abajo sigue tu código de siempre...
 
 import { 
   Client, 
@@ -24,175 +32,115 @@ import {
 import fetch from "node-fetch";
 import dotenv from "dotenv";
 
-// =====================================================
-// CARGAR .env (PASO 3 + 4 APLICADO)
-// =====================================================
-
 dotenv.config();
 
-console.log("===================================");
-console.log("TOKEN CARGADO?", process.env.TOKEN ? "SI" : "NO");
-console.log("CLIENT_ID CARGADO?", process.env.CLIENT_ID ? "SI" : "NO");
-console.log("GUILD_ID CARGADO?", process.env.GUILD_ID ? "SI" : "NO");
-console.log("===================================");
+// Asignamos el cliente a la variable global para que Express lo pueda ver
+const client = new Client({
+  intents: [GatewayIntentBits.Guilds],
+});
+botClient = client; // Conectamos la variable
 
 // =====================================================
-// CONFIG
+// URL DE APPS SCRIPT
 // =====================================================
-
-// OJO: Asegúrate que esta URL sea la correcta de tu despliegue web de Apps Script
 const WEBHOOK_URL = "https://script.google.com/macros/s/AKfycby1wPCsg09ZZpQBqknFpRJQgKzt93PaaJuIyIG46o7NlMvYgYiRpGkfSnbw7WUgiGif/exec";
 
-const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMessages
-  ],
-});
-
 // =====================================================
-// REGISTRAR /gasto y /inversion
+// DEFINICIÓN DE COMANDOS
 // =====================================================
-
 const commands = [
   new SlashCommandBuilder()
     .setName("gasto")
-    .setDescription("Registrar un gasto en Google Sheets")
-    .addStringOption(opt =>
-      opt.setName("categoria")
-        .setDescription("Categoría del gasto")
-        .setRequired(true)
-    )
-    .addStringOption(opt =>
-      opt.setName("descripcion")
-        .setDescription("Descripción del gasto")
-        .setRequired(true)
-    )
-    .addNumberOption(opt =>
-      opt.setName("monto")
-        .setDescription("Monto del gasto")
-        .setRequired(true)
-    )
-    .addStringOption(opt =>
-      opt.setName("metodo")
-        .setDescription("Método de pago")
-        .setRequired(true)
-    )
-    .toJSON(),
+    .setDescription("Registrar un gasto 💸")
+    .addStringOption(opt => opt.setName("categoria").setDescription("Categoría").setRequired(true))
+    .addStringOption(opt => opt.setName("descripcion").setDescription("Descripción").setRequired(true))
+    .addNumberOption(opt => opt.setName("monto").setDescription("Monto").setRequired(true))
+    .addStringOption(opt => opt.setName("metodo").setDescription("Método").setRequired(true)),
+
   new SlashCommandBuilder()
     .setName("inversion")
-    .setDescription("Registrar una inversión en Google Sheets")
-    .addStringOption(opt =>
-      opt.setName("ticker")
-        .setDescription("Ticker de la inversión")
-        .setRequired(true)
-    )
-    .addNumberOption(opt =>
-      opt.setName("cantidad")
-        .setDescription("Cantidad de acciones/unidades")
-        .setRequired(true)
-    )
-    .addNumberOption(opt =>
-      opt.setName("monto")
-        .setDescription("Monto total de la inversión")
-        .setRequired(true)
-    )
-    .toJSON()
-];
+    .setDescription("Registrar CEDEAR/Acción 📈")
+    .addStringOption(opt => opt.setName("ticker").setDescription("Ej: AAPL").setRequired(true))
+    .addNumberOption(opt => opt.setName("cantidad").setDescription("Cantidad").setRequired(true))
+    .addNumberOption(opt => opt.setName("monto").setDescription("Total invertido").setRequired(true))
+].map(c => c.toJSON());
 
 const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
 
 (async () => {
   try {
-    console.log("➡ Registrando comandos /gasto y /inversion…");
+    console.log("➡ Actualizando comandos...");
     await rest.put(
       Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID),
       { body: commands }
     );
-    console.log("✔ Comandos registrados correctamente.");
+    console.log("✔ Comandos listos.");
   } catch (err) {
-    console.error("❌ Error registrando comandos:", err);
+    console.error("❌ Error comandos:", err);
   }
 })();
 
 // =====================================================
-// MANEJO DEL COMANDO
+// MANEJO DE ERRORES DE CONEXIÓN (NUEVO)
 // =====================================================
+client.on('shardError', error => {
+    console.error('❌ Error de conexión websocket:', error);
+});
 
+client.on('shardDisconnect', () => {
+    console.error('❌ El bot se desconectó del socket.');
+    // No hacemos exit aquí porque Discord.js intenta reconectar solo.
+    // Si falla, el chequeo de Express (arriba) lo matará en 5 minutos.
+});
+
+// =====================================================
+// INTERACCIONES
+// =====================================================
 client.on("interactionCreate", async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
 
   if (interaction.commandName === "gasto") {
-    
-    const categoria = interaction.options.getString("categoria");
-    const descripcion = interaction.options.getString("descripcion");
-    const monto = interaction.options.getNumber("monto");
-    const metodo = interaction.options.getString("metodo");
-
-    await interaction.reply("⏳ Registrando gasto...");
-
-    const payload = { categoria, descripcion, monto, metodo };
-
-    console.log("➡ Enviando a Apps Script:", payload);
-
-    try {
-      const res = await fetch(WEBHOOK_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      });
-
-      const json = await res.json();
-      console.log("➡ Respuesta Apps Script:", json);
-
-      if (json.status === "ok") {
-        await interaction.editReply("✅ Gasto registrado correctamente en Google Sheets");
-      } else {
-        await interaction.editReply("❌ Error al registrar en Apps Script");
-      }
-
-    } catch (err) {
-      console.error("❌ ERROR DE CONEXIÓN:", err);
-      await interaction.editReply("⚠️ Error de conexión con Apps Script");
-    }
-  } 
+    await interaction.deferReply();
+    const payload = { 
+      tipo: "gasto", 
+      categoria: interaction.options.getString("categoria"),
+      descripcion: interaction.options.getString("descripcion"),
+      monto: interaction.options.getNumber("monto"),
+      metodo: interaction.options.getString("metodo")
+    };
+    await enviarAGoogle(interaction, payload);
+  }
   else if (interaction.commandName === "inversion") {
-    
-    const ticker = interaction.options.getString("ticker");
-    const cantidad = interaction.options.getNumber("cantidad");
-    const monto = interaction.options.getNumber("monto");
-
-    await interaction.reply("⏳ Registrando inversión...");
-
-    const payload = { tipo: "inversion", ticker, cantidad, monto };
-
-    console.log("➡ Enviando inversión a Apps Script:", payload);
-
-    try {
-      const res = await fetch(WEBHOOK_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      });
-
-      const json = await res.json();
-      console.log("➡ Respuesta Apps Script:", json);
-
-      if (json.status === "ok") {
-        await interaction.editReply("✅ Inversión registrada correctamente en Google Sheets");
-      } else {
-        await interaction.editReply("❌ Error al registrar inversión en Apps Script");
-      }
-
-    } catch (err) {
-      console.error("❌ ERROR DE CONEXIÓN:", err);
-      await interaction.editReply("⚠️ Error de conexión con Apps Script");
-    }
+    await interaction.deferReply();
+    const payload = { 
+      tipo: "inversion", 
+      ticker: interaction.options.getString("ticker"),
+      cantidad: interaction.options.getNumber("cantidad"),
+      monto: interaction.options.getNumber("monto")
+    };
+    await enviarAGoogle(interaction, payload);
   }
 });
 
-// =====================================================
-// LOGIN BOT
-// =====================================================
+async function enviarAGoogle(interaction, payload) {
+  try {
+    const res = await fetch(WEBHOOK_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    const json = await res.json();
+    
+    if (json.status === "ok") {
+      const msg = payload.tipo === "inversion" ? `Inversión: ${payload.ticker}` : "Gasto guardado";
+      await interaction.editReply(`✅ ${msg}`);
+    } else {
+      await interaction.editReply(`❌ Error: ${json.message}`);
+    }
+  } catch (err) {
+    console.error("Error envío:", err);
+    await interaction.editReply("⚠️ Error de conexión.");
+  }
+}
 
 client.login(process.env.TOKEN);
